@@ -1,11 +1,7 @@
 # Set compatibility date to current
 compatibility_date = "2024-12-29"
 
-# Node.js compatibility flags for Next.js
-compatibility_flags = [
-  "nodejs_compat_v2",
-  "nodejs_comp_populate_process_env",
-  "enable_nodejs_process_v2"
-]
+# Use the exact flag mentioned in the CLI warning
+compatibility_flags = ["nodejs_compat"]
 
 name = "kidnotkin-io"
