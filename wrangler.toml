@@ -1,7 +1,9 @@
 # Set compatibility date to current
 compatibility_date = "2024-12-29"
 
-# Use the exact flag mentioned in the CLI warning
+# Node.js compatibility flag (WORKED! - warnings are gone)
 compatibility_flags = ["nodejs_compat"]
 
+# Pages-specific configuration
 name = "kidnotkin-io"
+pages_build_output_dir = ".vercel/output/static"
