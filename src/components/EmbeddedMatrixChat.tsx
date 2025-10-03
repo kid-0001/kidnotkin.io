@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient } from "matrix-js-sdk";
+import { createClient, MatrixClient, Room, MatrixEvent } from "matrix-js-sdk";
 import { useState, useEffect, useRef } from 'react';
 
 interface Message {
@@ -10,9 +10,15 @@ interface Message {
     timestamp: number;
 }
 
+interface GuestCredentials {
+    access_token: string;
+    user_id: string;
+    device_id: string;
+}
+
 export default function EmbeddedMatrixChat() {
     const [messages, setMessages] = useState<Message[]>([]);
-    const [client, setClient] = useState<any>(null);
+    const [client, setClient] = useState<MatrixClient | null>(null);
     const [connected, setConnected] = useState(false);
     const [newMessage, setNewMessage] = useState('');
     const [userCount, setUserCount] = useState(0);
@@ -22,10 +28,14 @@ export default function EmbeddedMatrixChat() {
 
     useEffect(() => {
         initializeChat();
+        
+        // Cleanup function
         return () => {
-            client?.stopClient();
+            if (client) {
+                client.stopClient();
+            }
         };
-    }, []);
+    }, []); // Empty dependency array is correct here
 
     async function initializeChat() {
         try {
@@ -36,7 +46,7 @@ export default function EmbeddedMatrixChat() {
                 body: '{}'
             });
             
-            const guestCreds = await response.json();
+            const guestCreds: GuestCredentials = await response.json();
             
             // Create Matrix client
             const matrixClient = createClient({
@@ -52,21 +62,24 @@ export default function EmbeddedMatrixChat() {
             await matrixClient.joinRoom(roomId);
 
             // Listen for new messages
-            matrixClient.on("Room.timeline", (event: any, room: any) => {
+            matrixClient.on("Room.timeline", (event: MatrixEvent, room: Room) => {
                 if (event.getType() === "m.room.message" && room.roomId === roomId) {
-                    const message: Message = {
-                        id: event.getId(),
-                        user: event.getSender().split(':')[0].substring(1),
-                        text: event.getContent().body,
-                        timestamp: event.getTs()
-                    };
-                    
-                    setMessages(prev => [...prev.slice(-99), message]); // Keep last 100
+                    const content = event.getContent();
+                    if (content.body) {
+                        const message: Message = {
+                            id: event.getId() || '',
+                            user: event.getSender()?.split(':')[0].substring(1) || 'Unknown',
+                            text: content.body,
+                            timestamp: event.getTs() || Date.now()
+                        };
+                        
+                        setMessages(prev => [...prev.slice(-99), message]); // Keep last 100
+                    }
                 }
             });
 
             // Listen for user count changes
-            matrixClient.on("RoomState.events", (event: any, state: any) => {
+            matrixClient.on("RoomState.events", (event: MatrixEvent) => {
                 if (event.getType() === "m.room.member") {
                     const room = matrixClient.getRoom(roomId);
                     if (room) {
@@ -86,7 +99,9 @@ export default function EmbeddedMatrixChat() {
 
     // Auto-scroll to bottom
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
     }, [messages]);
 
     const sendMessage = async () => {
@@ -100,7 +115,7 @@ export default function EmbeddedMatrixChat() {
         }
     };
 
-    const handleKeyPress = (e: React.KeyboardEvent) => {
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
