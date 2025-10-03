@@ -4,63 +4,64 @@ import { useState, useEffect } from 'react';
 
 export default function MatrixConnectionTest() {
     const [status, setStatus] = useState('Starting...');
-    const [log, setLog] = useState([]);
+    const [log, setLog] = useState<string[]>([]);
 
-    const addLog = (message) => {
+    const addLog = (message: string) => {
         setLog(prev => [...prev, `${new Date().toTimeString()}: ${message}`]);
     };
 
     useEffect(() => {
+        async function testConnection() {
+            try {
+                addLog('Step 1: Testing guest registration...');
+                setStatus('Testing guest registration...');
+                
+                const response = await fetch('https://matrix.kidnotkin.io/_matrix/client/v3/register?kind=guest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Guest registration failed: ${response.status} ${response.statusText}`);
+                }
+                
+                const guestData = await response.json();
+                addLog(`Step 1 SUCCESS: Guest user ${guestData.user_id}`);
+                
+                addLog('Step 2: Loading Matrix SDK...');
+                setStatus('Loading Matrix SDK...');
+                
+                const { createClient } = await import("matrix-js-sdk");
+                addLog('Step 2 SUCCESS: Matrix SDK loaded');
+                
+                addLog('Step 3: Creating Matrix client...');
+                const client = createClient({
+                    baseUrl: "https://matrix.kidnotkin.io",
+                    accessToken: guestData.access_token,
+                    userId: guestData.user_id,
+                });
+                
+                addLog('Step 3 SUCCESS: Client created');
+                addLog('Step 4: Starting client...');
+                setStatus('Starting Matrix client...');
+                
+                await client.startClient();
+                addLog('Step 4 SUCCESS: Client started');
+                
+                setStatus('✅ Connected successfully!');
+                addLog('ALL STEPS COMPLETED - Matrix connection working!');
+                
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                addLog(`❌ ERROR: ${errorMessage}`);
+                setStatus(`❌ Failed: ${errorMessage}`);
+                console.error('Matrix connection error:', error);
+            }
+        }
+        
         testConnection();
     }, []);
-
-    async function testConnection() {
-        try {
-            addLog('Step 1: Testing guest registration...');
-            setStatus('Testing guest registration...');
-            
-            const response = await fetch('https://matrix.kidnotkin.io/_matrix/client/v3/register?kind=guest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: '{}'
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Guest registration failed: ${response.status} ${response.statusText}`);
-            }
-            
-            const guestData = await response.json();
-            addLog(`Step 1 SUCCESS: Guest user ${guestData.user_id}`);
-            
-            addLog('Step 2: Loading Matrix SDK...');
-            setStatus('Loading Matrix SDK...');
-            
-            const { createClient } = await import("matrix-js-sdk");
-            addLog('Step 2 SUCCESS: Matrix SDK loaded');
-            
-            addLog('Step 3: Creating Matrix client...');
-            const client = createClient({
-                baseUrl: "https://matrix.kidnotkin.io",
-                accessToken: guestData.access_token,
-                userId: guestData.user_id,
-            });
-            
-            addLog('Step 3 SUCCESS: Client created');
-            addLog('Step 4: Starting client...');
-            setStatus('Starting Matrix client...');
-            
-            await client.startClient();
-            addLog('Step 4 SUCCESS: Client started');
-            
-            setStatus('✅ Connected successfully!');
-            addLog('ALL STEPS COMPLETED - Matrix connection working!');
-            
-        } catch (error) {
-            addLog(`❌ ERROR: ${error.message}`);
-            setStatus(`❌ Failed: ${error.message}`);
-            console.error('Matrix connection error:', error);
-        }
-    }
 
     return (
         <div className="p-4 bg-[#0e0e10] text-white text-xs">

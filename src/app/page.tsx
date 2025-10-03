@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from 'react';
 import MatrixConnectionTest from '../components/MatrixConnectionTest';
 
 export default function StreamingPage() {
-    const [chatVisible, setChatVisible] = useState(true);
-
     return (
         <div className="min-h-screen bg-gray-900 text-white">
-            <header className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+            <header className="p-4 bg-gray-800 border-b border-gray-700">
                 <h1 className="text-xl md:text-2xl font-bold text-blue-400">kidnotkin.io - Debug Mode</h1>
             </header>
             
