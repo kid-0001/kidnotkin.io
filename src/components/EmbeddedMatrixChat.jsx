@@ -3,26 +3,13 @@
 import { createClient } from "matrix-js-sdk";
 import { useState, useEffect, useRef } from 'react';
 
-interface Message {
-    id: string;
-    user: string;
-    text: string;
-    timestamp: number;
-}
-
-interface GuestCredentials {
-    access_token: string;
-    user_id: string;
-    device_id: string;
-}
-
 export default function EmbeddedMatrixChat() {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [client, setClient] = useState<any>(null); // Simplified typing to avoid SDK type issues
+    const [messages, setMessages] = useState([]);
+    const [client, setClient] = useState(null);
     const [connected, setConnected] = useState(false);
     const [newMessage, setNewMessage] = useState('');
     const [userCount, setUserCount] = useState(0);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef(null);
 
     const roomId = "!Hbp8rkibQKPAM_zITbO2NFXtuTelQllH2eBFA2vrdRk:kidnotkin.io";
 
@@ -34,7 +21,7 @@ export default function EmbeddedMatrixChat() {
                 client.stopClient();
             }
         };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []);
 
     async function initializeChat() {
         try {
@@ -45,7 +32,7 @@ export default function EmbeddedMatrixChat() {
                 body: '{}'
             });
             
-            const guestCreds: GuestCredentials = await response.json();
+            const guestCreds = await response.json();
             
             // Create Matrix client
             const matrixClient = createClient({
@@ -60,13 +47,13 @@ export default function EmbeddedMatrixChat() {
             // Join the chat room
             await matrixClient.joinRoom(roomId);
 
-            // Listen for new messages - simplified event handling
-            matrixClient.on("Room.timeline" as any, (event: any, room: any) => {
+            // Listen for new messages
+            matrixClient.on("Room.timeline", (event, room) => {
                 if (event.getType() === "m.room.message" && room.roomId === roomId) {
                     const content = event.getContent();
                     if (content && content.body) {
-                        const message: Message = {
-                            id: event.getId() || '',
+                        const message = {
+                            id: event.getId() || Date.now().toString(),
                             user: event.getSender()?.split(':')[0].substring(1) || 'Unknown',
                             text: content.body,
                             timestamp: event.getTs() || Date.now()
@@ -77,8 +64,8 @@ export default function EmbeddedMatrixChat() {
                 }
             });
 
-            // Listen for user count changes
-            matrixClient.on("RoomState.events" as any, (event: any) => {
+            // Listen for user count changes  
+            matrixClient.on("RoomState.events", (event) => {
                 if (event.getType() === "m.room.member") {
                     const room = matrixClient.getRoom(roomId);
                     if (room) {
@@ -114,7 +101,7 @@ export default function EmbeddedMatrixChat() {
         }
     };
 
-    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();

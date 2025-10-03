@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import EmbeddedMatrixChat from '../components/EmbeddedMatrixChat';
+import EmbeddedMatrixChat from '../components/EmbeddedMatrixChat.jsx';
 
 export default function StreamingPage() {
     const [chatVisible, setChatVisible] = useState(true);
