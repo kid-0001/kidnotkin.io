@@ -12,7 +12,8 @@ export default function MatrixLiveChat() {
     const intervalRef = useRef(null);
 
     const MATRIX_BASE_URL = 'https://matrix.kidnotkin.io';
-    const ROOM_ID = '!Hbp8rkibQKPAM_zITbO2NFXtuTelQllH2eBFA2vrdRk:kidnotkin.io';
+    const ROOM_ALIAS = '#chatroom:kidnotkin.io';
+    const ROOM_ID = '!V5tqxDzedaH1raG7qTMVwVpkjxeUfvghiMWECXCx1w8';
 
     useEffect(() => {
         initializeMatrix();
@@ -47,17 +48,46 @@ export default function MatrixLiveChat() {
             };
 
             setClient(newClient);
-            setStatus('connected');
+            console.log('Guest registered:', guestData.user_id);
+
+            // Join the chatroom
+            await joinRoom(newClient);
             
-            // Fetch messages immediately
+            // Fetch messages
             await fetchMessages(newClient);
             
-            // Start polling for updates
+            setStatus('connected');
+            
+            // Start polling
             startPolling(newClient);
 
         } catch (err) {
+            console.error('Matrix initialization failed:', err);
             setError(err.message);
             setStatus('error');
+        }
+    };
+
+    const joinRoom = async (clientData) => {
+        try {
+            const joinResponse = await fetch(`${MATRIX_BASE_URL}/_matrix/client/v3/join/${encodeURIComponent(ROOM_ALIAS)}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${clientData.accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: '{}'
+            });
+
+            if (joinResponse.ok) {
+                console.log('Successfully joined chatroom');
+            } else {
+                const errorData = await joinResponse.json();
+                console.warn('Room join failed:', errorData);
+                // Don't throw - try to fetch messages anyway
+            }
+        } catch (err) {
+            console.warn('Room join error:', err);
         }
     };
 
@@ -85,23 +115,28 @@ export default function MatrixLiveChat() {
                     ?.reverse() || [];
 
                 setMessages(newMessages);
-            } else if (response.status === 403) {
-                // Room permissions issue - show helpful message
-                setError('Room access restricted. Working on fixing permissions...');
+                console.log('Fetched messages from chatroom:', newMessages.length);
+            } else {
+                const errorData = await response.json();
+                console.error('Message fetch failed:', response.status, errorData);
+                
+                if (response.status === 403) {
+                    setError('Room access denied. Trying different approach...');
+                }
             }
         } catch (err) {
-            // Silent fail for polling errors
+            console.error('Message fetch error:', err);
         }
     };
 
     const startPolling = (clientData) => {
         intervalRef.current = setInterval(() => {
             fetchMessages(clientData);
-        }, 8000);
+        }, 10000);
     };
 
     const openElementRoom = () => {
-        window.open('https://app.element.io/#/room/#live-chat:kidnotkin.io', '_blank');
+        window.open(`https://app.element.io/#/room/${encodeURIComponent(ROOM_ALIAS)}`, '_blank');
     };
 
     useEffect(() => {
@@ -124,14 +159,13 @@ export default function MatrixLiveChat() {
             {/* Header */}
             <div className="p-3 bg-[#18181b] border-b border-gray-700 flex-shrink-0">
                 <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-semibold">LIVE CHAT</h3>
+                    <h3 className="text-sm font-semibold">CHAT</h3>
                     <span className="text-xs text-gray-400">{messages.length}</span>
                 </div>
-                {client && (
-                    <div className="text-xs text-blue-400 mt-1">
-                        {client.userId.split(':')[0].substring(1)}
-                    </div>
-                )}
+                <div className="text-xs text-gray-400 mt-1">
+                    {ROOM_ALIAS}
+                    {client && ` • ${client.userId.split(':')[0].substring(1)}`}
+                </div>
             </div>
 
             {/* Messages */}
@@ -142,7 +176,7 @@ export default function MatrixLiveChat() {
                         <div className="text-xs text-gray-400 mb-3">{error}</div>
                         <button 
                             onClick={initializeMatrix}
-                            className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
+                            className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs transition-colors"
                         >
                             Retry
                         </button>
