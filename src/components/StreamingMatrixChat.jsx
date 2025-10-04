@@ -1,40 +1,36 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function StreamingMatrixChat() {
-    const [messages, setMessages] = useState([]);
     const [connected, setConnected] = useState(false);
-    const [viewerCount, setViewerCount] = useState(0);
-    const messagesEndRef = useRef(null);
+    const [hasElementSession, setHasElementSession] = useState(false);
 
     useEffect(() => {
-        // Simulate fetching recent messages via REST API
-        fetchRecentMessages();
-        // Set up periodic refresh for read-only viewing
-        const interval = setInterval(fetchRecentMessages, 5000); // Refresh every 5 seconds
-        
-        return () => clearInterval(interval);
+        testMatrixConnection();
+        checkElementSession();
     }, []);
 
-    async function fetchRecentMessages() {
+    async function testMatrixConnection() {
         try {
-            // Use Matrix REST API directly (no SDK needed)
-            const response = await fetch('https://matrix.kidnotkin.io/_matrix/client/v3/register?kind=guest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: '{}'
-            });
-            
-            if (response.ok) {
-                setConnected(true);
-                // For now, show connection success
-                // Real message fetching would require complex Matrix API calls
-                // Better to use Element integration
-            }
+            const response = await fetch('https://matrix.kidnotkin.io/_matrix/client/versions');
+            const data = await response.json();
+            setConnected(data.versions && data.versions.length > 0);
         } catch (error) {
             setConnected(false);
         }
+    }
+
+    function checkElementSession() {
+        // Check if user has active Element session
+        const elementTokens = [
+            localStorage.getItem('mx_access_token'),
+            sessionStorage.getItem('mx_access_token'),
+            localStorage.getItem('@riot-web/access-token'),
+            // Element Web stores tokens in various keys
+        ].filter(Boolean);
+        
+        setHasElementSession(elementTokens.length > 0);
     }
 
     const openElementChat = () => {
@@ -48,19 +44,8 @@ export default function StreamingMatrixChat() {
         }
     };
 
-    const openElementRegister = () => {
-        window.open('https://app.element.io/#/register', '_blank');
-    };
-
-    useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [messages]);
-
     return (
         <div className="flex flex-col h-full bg-[#0e0e10] text-white font-mono text-sm">
-            {/* Chat Header */}
             <div className="p-3 bg-[#18181b] border-b border-gray-700">
                 <h3 className="text-sm font-semibold flex items-center">
                     LIVE CHAT 
@@ -68,72 +53,54 @@ export default function StreamingMatrixChat() {
                 </h3>
             </div>
 
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {!connected && (
-                    <div className="text-center text-gray-400 text-sm p-4">
-                        Connecting to Matrix server...
-                    </div>
-                )}
-                
-                {connected && (
-                    <div className="space-y-3 p-4">
-                        <div className="text-center text-gray-300 text-sm">
-                            🎉 Matrix server connected!
-                        </div>
-                        <div className="text-center text-gray-400 text-xs">
-                            Live chat messages will appear here when streaming
-                        </div>
-                        <div className="text-center text-gray-500 text-xs">
-                            • Anyone can view messages<br/>
-                            • Account required to participate
-                        </div>
-                    </div>
-                )}
-                
-                {/* Sample messages for demonstration */}
-                {connected && (
-                    <div className="space-y-1">
-                        <div className="text-sm leading-tight opacity-50">
-                            <span className="text-[#9147ff] font-bold">streamer</span>
-                            <span className="text-white">: Welcome to the stream!</span>
-                        </div>
-                        <div className="text-sm leading-tight opacity-50">
-                            <span className="text-[#9147ff] font-bold">viewer1</span>
-                            <span className="text-white">: Great show today</span>
-                        </div>
-                        <div className="text-sm leading-tight opacity-30">
-                            <span className="text-gray-500 text-xs">↑ Sample messages • Real chat when streaming</span>
-                        </div>
-                    </div>
-                )}
-                
-                <div ref={messagesEndRef} />
+            <div className="flex-1 flex items-center justify-center p-4">
+                <div className="text-center space-y-4 max-w-64">
+                    {connected ? (
+                        <>
+                            <div className="text-white text-sm font-medium">
+                                💬 Live Chat Active
+                            </div>
+                            <div className="text-gray-400 text-xs leading-relaxed">
+                                {hasElementSession ? 
+                                    'Continue your Matrix session →' : 
+                                    'Anyone can view • Account needed to chat'
+                                }
+                            </div>
+                            <button 
+                                onClick={openElementChat}
+                                className="w-full bg-[#9147ff] hover:bg-purple-600 px-4 py-3 rounded font-medium transition-colors text-sm"
+                            >
+                                {hasElementSession ? 'Continue Chatting' : 'Join Discussion'}
+                            </button>
+                            {!hasElementSession && (
+                                <button 
+                                    onClick={() => window.open('https://app.element.io/#/register', '_blank')}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-medium transition-colors text-xs"
+                                >
+                                    Create Free Account
+                                </button>
+                            )}
+                            <div className="text-gray-500 text-xs">
+                                Matrix-powered • Privacy-first
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="text-red-400 text-sm">Chat Offline</div>
+                            <button 
+                                onClick={openElementChat}
+                                className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-medium transition-colors text-sm"
+                            >
+                                Try Element Chat
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
-            {/* Participation Area */}
-            <div className="p-3 border-t border-gray-700 bg-[#18181b]">
-                <div className="text-center space-y-3">
-                    <div className="text-xs text-gray-400">
-                        Join the live discussion during streams
-                    </div>
-                    <div className="flex gap-2 text-xs">
-                        <button 
-                            onClick={openElementChat}
-                            className="flex-1 bg-[#9147ff] hover:bg-purple-600 px-3 py-2 rounded transition-colors"
-                        >
-                            Join Chat
-                        </button>
-                        <button 
-                            onClick={openElementRegister}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded transition-colors"
-                        >
-                            Create Account
-                        </button>
-                    </div>
-                    <div className="text-xs text-gray-500">
-                        Free Matrix account • No phone required • Privacy-first
-                    </div>
+            <div className="p-2 border-t border-gray-700 bg-[#18181b] text-center">
+                <div className="text-xs text-gray-400">
+                    Secure decentralized chat
                 </div>
             </div>
         </div>
