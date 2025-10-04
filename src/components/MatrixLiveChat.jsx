@@ -9,11 +9,11 @@ export default function MatrixLiveChat() {
     const [client, setClient] = useState(null);
     const [messageText, setMessageText] = useState('');
     const [sending, setSending] = useState(false);
-    const [userType, setUserType] = useState('guest'); // 'guest', 'registered'
+    const [userType, setUserType] = useState('guest');
+    const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     
     const messagesEndRef = useRef(null);
     const intervalRef = useRef(null);
-    const inputRef = useRef(null);
 
     const MATRIX_BASE_URL = 'https://matrix.kidnotkin.io';
     const ROOM_ALIAS = '#chatroom:kidnotkin.io';
@@ -37,25 +37,26 @@ export default function MatrixLiveChat() {
             setStatus('connecting');
             setError(null);
 
-            // Try to get existing user session first
-            const existingSession = checkExistingSession();
-            if (existingSession) {
-                setClient(existingSession);
-                setUserType('registered');
-                console.log('Using existing session:', existingSession.userId);
+            // Try multiple methods to find existing session
+            let sessionClient = await findExistingSession();
+            
+            if (sessionClient) {
+                console.log('Found existing session:', sessionClient.userId);
+                setClient(sessionClient);
+                setUserType('authenticated');
             } else {
-                // Register guest user
-                const guestClient = await registerGuest();
-                setClient(guestClient);
+                // Fallback to guest
+                sessionClient = await registerGuest();
+                setClient(sessionClient);
                 setUserType('guest');
+                setShowLoginPrompt(true);
             }
 
-            // Join room and fetch messages
-            await joinRoom(client || existingSession);
-            await fetchMessages(client || existingSession);
+            await joinRoom(sessionClient);
+            await fetchMessages(sessionClient);
             
             setStatus('connected');
-            startPolling(client || existingSession);
+            startPolling(sessionClient);
 
         } catch (err) {
             console.error('Matrix initialization failed:', err);
@@ -64,17 +65,120 @@ export default function MatrixLiveChat() {
         }
     };
 
-    const checkExistingSession = () => {
-        // Check for existing Matrix session in localStorage
-        const token = localStorage.getItem('mx_access_token') || 
-                     localStorage.getItem('mx_access_token_https://matrix.kidnotkin.io');
-        const userId = localStorage.getItem('mx_user_id') || 
-                      localStorage.getItem('mx_user_id_https://matrix.kidnotkin.io');
+    const findExistingSession = async () => {
+        // Check multiple possible Element localStorage keys
+        const possibleKeys = [
+            'mx_access_token',
+            `mx_access_token_${MATRIX_BASE_URL}`,
+            'mx_access_token_https://matrix.kidnotkin.io',
+            '@riot-web/access-token',
+            'mx_user_id',
+            'mx_device_id'
+        ];
+
+        const sessionData = {};
         
-        if (token && userId) {
-            return { accessToken: token, userId, type: 'registered' };
+        // Collect all possible session data
+        for (const key of possibleKeys) {
+            const value = localStorage.getItem(key);
+            if (value) {
+                console.log('Found localStorage key:', key, '=', value.substring(0, 20) + '...');
+                if (key.includes('access_token')) {
+                    sessionData.accessToken = value;
+                }
+                if (key.includes('user_id')) {
+                    sessionData.userId = value;
+                }
+            }
         }
+
+        // Try to find token/user ID pairs
+        if (!sessionData.accessToken || !sessionData.userId) {
+            // Look for any token-like strings
+            for (const [key, value] of Object.entries(localStorage)) {
+                if (key.toLowerCase().includes('token') && value.length > 50) {
+                    console.log('Potential token found:', key);
+                    sessionData.accessToken = sessionData.accessToken || value;
+                }
+                if (key.toLowerCase().includes('user') && value.startsWith('@')) {
+                    console.log('Potential user ID found:', key, value);
+                    sessionData.userId = sessionData.userId || value;
+                }
+            }
+        }
+
+        // Test the session if we have a token
+        if (sessionData.accessToken) {
+            return await validateSession(sessionData.accessToken, sessionData.userId);
+        }
+
         return null;
+    };
+
+    const validateSession = async (token, userId) => {
+        try {
+            console.log('Validating session with token:', token.substring(0, 20) + '...');
+            
+            const response = await fetch(`${MATRIX_BASE_URL}/_matrix/client/v3/account/whoami`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Session validation successful:', data);
+                
+                return {
+                    accessToken: token,
+                    userId: data.user_id || userId,
+                    type: 'authenticated'
+                };
+            } else {
+                console.log('Session validation failed:', response.status);
+                return null;
+            }
+        } catch (err) {
+            console.error('Session validation error:', err);
+            return null;
+        }
+    };
+
+    const manualLogin = async () => {
+        try {
+            // Prompt user for their access token
+            const tokenPrompt = `To connect your existing Matrix account:
+1. Go to Element settings
+2. Find "Access Token" in Advanced settings
+3. Copy and paste it here:`;
+            
+            const token = prompt(tokenPrompt);
+            if (!token || token.length < 10) {
+                return;
+            }
+
+            const validatedSession = await validateSession(token);
+            if (validatedSession) {
+                // Store for future use
+                localStorage.setItem('kidnotkin_matrix_token', token);
+                localStorage.setItem('kidnotkin_matrix_user', validatedSession.userId);
+                
+                setClient(validatedSession);
+                setUserType('authenticated');
+                setShowLoginPrompt(false);
+                
+                await joinRoom(validatedSession);
+                await fetchMessages(validatedSession);
+                startPolling(validatedSession);
+                
+                alert(`Successfully connected as ${validatedSession.userId}!`);
+            } else {
+                alert('Invalid access token. Please check and try again.');
+            }
+        } catch (err) {
+            alert(`Login failed: ${err.message}`);
+        }
     };
 
     const registerGuest = async () => {
@@ -90,8 +194,6 @@ export default function MatrixLiveChat() {
         }
 
         const guestData = await response.json();
-        console.log('Guest registered:', guestData.user_id);
-        
         return {
             accessToken: guestData.access_token,
             userId: guestData.user_id,
@@ -114,9 +216,6 @@ export default function MatrixLiveChat() {
 
             if (joinResponse.ok) {
                 console.log('Successfully joined chatroom');
-            } else {
-                const errorData = await joinResponse.json();
-                console.warn('Room join failed but continuing:', errorData);
             }
         } catch (err) {
             console.warn('Room join error:', err);
@@ -148,9 +247,6 @@ export default function MatrixLiveChat() {
                     ?.reverse() || [];
 
                 setMessages(newMessages);
-            } else {
-                const errorData = await response.json();
-                console.error('Message fetch failed:', errorData);
             }
         } catch (err) {
             console.error('Message fetch error:', err);
@@ -179,15 +275,10 @@ export default function MatrixLiveChat() {
 
             if (response.ok) {
                 setMessageText('');
-                // Fetch messages to show the new message
                 await fetchMessages(client);
             } else {
                 const errorData = await response.json();
-                if (errorData.errcode === 'M_FORBIDDEN') {
-                    setError('Message sending not allowed. Try creating an account.');
-                } else {
-                    setError(`Send failed: ${errorData.error || 'Unknown error'}`);
-                }
+                setError(`Send failed: ${errorData.error || 'Permission denied'}`);
             }
         } catch (err) {
             setError(`Send error: ${err.message}`);
@@ -204,6 +295,7 @@ export default function MatrixLiveChat() {
     };
 
     const startPolling = (clientData) => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(() => {
             fetchMessages(clientData);
         }, 5000);
@@ -213,16 +305,12 @@ export default function MatrixLiveChat() {
         window.open(`https://app.element.io/#/room/${encodeURIComponent(ROOM_ALIAS)}`, '_blank');
     };
 
-    const promptRegistration = () => {
-        window.open('https://app.element.io/#/register', '_blank');
-    };
-
     if (status === 'connecting') {
         return (
             <div className="flex items-center justify-center h-full bg-[#0e0e10] text-white p-4">
                 <div className="text-center">
                     <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-                    <div className="text-sm text-gray-400">Connecting to chat...</div>
+                    <div className="text-sm text-gray-400">Detecting Matrix session...</div>
                 </div>
             </div>
         );
@@ -236,38 +324,49 @@ export default function MatrixLiveChat() {
                     <h3 className="text-sm font-semibold">LIVE CHAT</h3>
                     <div className="text-xs text-gray-400">{messages.length}</div>
                 </div>
-                <div className="text-xs text-gray-400 mt-1 flex justify-between items-center">
-                    <span>
-                        {userType === 'guest' ? '👁️ Viewing' : '✓ Connected'}
+                <div className="text-xs mt-1 flex justify-between items-center">
+                    <span className={userType === 'authenticated' ? 'text-green-400' : 'text-blue-400'}>
+                        {userType === 'authenticated' ? '✓ Logged In' : '👁️ Guest'}
                         {client && ` • ${client.userId.split(':')[0].substring(1)}`}
                     </span>
-                    <button 
-                        onClick={openElementRoom}
-                        className="text-blue-400 hover:text-blue-300 text-xs"
-                    >
-                        Open Element
-                    </button>
+                    <div className="flex space-x-2">
+                        {userType === 'guest' && (
+                            <button 
+                                onClick={manualLogin}
+                                className="text-green-400 hover:text-green-300 text-xs underline"
+                            >
+                                Connect Account
+                            </button>
+                        )}
+                        <button 
+                            onClick={openElementRoom}
+                            className="text-blue-400 hover:text-blue-300 text-xs underline"
+                        >
+                            Element
+                        </button>
+                    </div>
                 </div>
             </div>
 
+            {/* Login Prompt */}
+            {showLoginPrompt && userType === 'guest' && (
+                <div className="p-2 bg-yellow-900/50 border-b border-yellow-600/50 text-yellow-200 text-xs text-center">
+                    Already have a Matrix account? 
+                    <button 
+                        onClick={manualLogin}
+                        className="ml-1 underline hover:no-underline"
+                    >
+                        Connect it here
+                    </button>
+                </div>
+            )}
+
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {status === 'error' ? (
-                    <div className="text-center text-red-400 text-sm p-4">
-                        <div className="mb-2">Connection Error</div>
-                        <div className="text-xs text-gray-400 mb-3">{error}</div>
-                        <button 
-                            onClick={initializeMatrix}
-                            className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs transition-colors"
-                        >
-                            Retry
-                        </button>
-                    </div>
-                ) : messages.length === 0 ? (
+                {messages.length === 0 ? (
                     <div className="text-center text-gray-400 text-sm py-8">
                         <div className="mb-2">💬</div>
                         <div>No recent messages</div>
-                        <div className="text-xs mt-2">Start the conversation!</div>
                     </div>
                 ) : (
                     messages.map((msg) => (
@@ -288,40 +387,26 @@ export default function MatrixLiveChat() {
                 {error && (
                     <div className="text-red-400 text-xs mb-2 text-center">
                         {error}
-                        {error.includes('not allowed') && (
-                            <button 
-                                onClick={promptRegistration}
-                                className="ml-2 text-blue-400 hover:text-blue-300 underline"
-                            >
-                                Create Account
-                            </button>
-                        )}
                     </div>
                 )}
                 
                 <div className="flex space-x-2">
                     <input
-                        ref={inputRef}
                         type="text"
                         value={messageText}
                         onChange={(e) => setMessageText(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        placeholder={userType === 'guest' ? 'Send a message (guest)...' : 'Send a message...'}
-                        className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        placeholder={userType === 'authenticated' ? 'Send a message...' : 'Send message (guest mode)...'}
+                        className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                         disabled={sending}
                     />
                     <button
                         onClick={sendMessage}
                         disabled={!messageText.trim() || sending}
-                        className="bg-[#9147ff] hover:bg-purple-600 disabled:bg-gray-600 disabled:cursor-not-allowed px-4 py-2 rounded text-sm font-medium transition-colors"
+                        className="bg-[#9147ff] hover:bg-purple-600 disabled:bg-gray-600 px-4 py-2 rounded text-sm font-medium transition-colors"
                     >
                         {sending ? '⏳' : 'Send'}
                     </button>
-                </div>
-                
-                <div className="text-xs text-gray-500 mt-2 text-center">
-                    {userType === 'guest' && 'Guest access • '}
-                    Press Enter to send • Matrix-powered chat
                 </div>
             </div>
         </div>
