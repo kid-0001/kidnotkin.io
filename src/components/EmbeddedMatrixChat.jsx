@@ -10,7 +10,7 @@ export default function EmbeddedMatrixChat() {
     const [sdkLoaded, setSdkLoaded] = useState(false);
     const messagesEndRef = useRef(null);
 
-    const roomId = "!Hbp8rkibQKPAM_zITbO2NFXtuTelQllH2eBFA2vrdRk:kidnotkin.io";
+    const roomId = "#live-chat:kidnotkin.io"; // CORRECT ROOM ID
 
     useEffect(() => {
         loadMatrixSDK();
@@ -18,7 +18,6 @@ export default function EmbeddedMatrixChat() {
 
     async function loadMatrixSDK() {
         try {
-            // Load Matrix SDK from CDN
             if (!window.matrixcs) {
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/matrix-js-sdk@latest/dist/browser-matrix.js';
@@ -27,7 +26,8 @@ export default function EmbeddedMatrixChat() {
                     initializeChat();
                 };
                 script.onerror = () => {
-                    console.error('Failed to load Matrix SDK from CDN');
+                    console.error('Failed to load Matrix SDK');
+                    setSdkLoaded(false);
                 };
                 document.head.appendChild(script);
             } else {
@@ -50,7 +50,7 @@ export default function EmbeddedMatrixChat() {
             
             const guestCreds = await response.json();
             
-            // Create Matrix client using CDN version
+            // Create Matrix client
             const matrixClient = window.matrixcs.createClient({
                 baseUrl: "https://matrix.kidnotkin.io",
                 accessToken: guestCreds.access_token,
@@ -59,6 +59,8 @@ export default function EmbeddedMatrixChat() {
             });
 
             await matrixClient.startClient({ initialSyncLimit: 20 });
+            
+            // Join the CORRECT room
             await matrixClient.joinRoom(roomId);
 
             // Listen for messages
@@ -123,7 +125,7 @@ export default function EmbeddedMatrixChat() {
 
     return (
         <div className="flex flex-col h-full bg-[#0e0e10] text-white font-mono text-sm">
-            <div className="p-3 bg-[#18181b] border-b border-gray-700 flex justify-between items-center">
+            <div className="p-3 bg-[#18181b] border-b border-gray-700">
                 <h3 className="text-sm font-semibold flex items-center">
                     STREAM CHAT 
                     <span className={`ml-2 w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}></span>
@@ -168,7 +170,7 @@ export default function EmbeddedMatrixChat() {
                     </div>
                 ) : (
                     <div className="text-xs text-center text-gray-400">
-                        <a href="https://app.element.io/#/room/!Hbp8rkibQKPAM_zITbO2NFXtuTelQllH2eBFA2vrdRk:matrix.kidnotkin.io" target="_blank" className="text-[#9147ff] hover:underline">
+                        <a href="https://app.element.io/#/room/#live-chat:kidnotkin.io" target="_blank" className="text-[#9147ff] hover:underline">
                             Open in Element →
                         </a>
                     </div>
