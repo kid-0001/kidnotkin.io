@@ -25,7 +25,6 @@ export default function EmbeddedMatrixChat() {
 
     async function initializeChat() {
         try {
-            // Register guest user (verified working!)
             const response = await fetch('https://matrix.kidnotkin.io/_matrix/client/v3/register?kind=guest', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -34,7 +33,6 @@ export default function EmbeddedMatrixChat() {
             
             const guestCreds = await response.json();
             
-            // Create Matrix client
             const matrixClient = createClient({
                 baseUrl: "https://matrix.kidnotkin.io",
                 accessToken: guestCreds.access_token,
@@ -43,11 +41,8 @@ export default function EmbeddedMatrixChat() {
             });
 
             await matrixClient.startClient({ initialSyncLimit: 20 });
-            
-            // Join the chat room
             await matrixClient.joinRoom(roomId);
 
-            // Listen for new messages
             matrixClient.on("Room.timeline", (event, room) => {
                 if (event.getType() === "m.room.message" && room.roomId === roomId) {
                     const content = event.getContent();
@@ -59,12 +54,11 @@ export default function EmbeddedMatrixChat() {
                             timestamp: event.getTs() || Date.now()
                         };
                         
-                        setMessages(prev => [...prev.slice(-99), message]); // Keep last 100
+                        setMessages(prev => [...prev.slice(-99), message]);
                     }
                 }
             });
 
-            // Listen for user count changes  
             matrixClient.on("RoomState.events", (event) => {
                 if (event.getType() === "m.room.member") {
                     const room = matrixClient.getRoom(roomId);
@@ -83,7 +77,6 @@ export default function EmbeddedMatrixChat() {
         }
     }
 
-    // Auto-scroll to bottom
     useEffect(() => {
         if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -110,7 +103,6 @@ export default function EmbeddedMatrixChat() {
 
     return (
         <div className="flex flex-col h-full bg-[#0e0e10] text-white font-mono text-sm">
-            {/* Chat Header */}
             <div className="p-3 bg-[#18181b] border-b border-gray-700 flex justify-between items-center">
                 <h3 className="text-sm font-semibold flex items-center">
                     STREAM CHAT 
@@ -123,7 +115,6 @@ export default function EmbeddedMatrixChat() {
                 )}
             </div>
 
-            {/* Messages Area - Twitch Style */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {!connected && (
                     <div className="text-center text-gray-400 text-sm p-4">
@@ -140,7 +131,6 @@ export default function EmbeddedMatrixChat() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area */}
             <div className="p-2 border-t border-gray-700 bg-[#18181b]">
                 {connected ? (
                     <div className="flex gap-2">
@@ -163,8 +153,8 @@ export default function EmbeddedMatrixChat() {
                     </div>
                 ) : (
                     <div className="text-xs text-center text-gray-400">
-                        <a href="https://cinny.kidnotkin.io" target="_blank" className="text-[#9147ff] hover:underline">
-                            Connection failed - Open full client →
+                        <a href="https://app.element.io/#/room/!Hbp8rkibQKPAM_zITbO2NFXtuTelQllH2eBFA2vrdRk:matrix.kidnotkin.io" target="_blank" className="text-[#9147ff] hover:underline">
+                            Open in Element client →
                         </a>
                     </div>
                 )}
