@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import StreamingMatrixChat from '../components/StreamingMatrixChat.jsx';
+import MatrixLiveChat from '../components/MatrixLiveChat.jsx';
 
 export default function StreamingPage() {
     const [chatVisible, setChatVisible] = useState(true);
@@ -110,7 +110,7 @@ export default function StreamingPage() {
                             title="Drag to resize chat"
                         />
                         
-                        <StreamingMatrixChat />
+                        <MatrixLiveChat />
                     </div>
                 )}
                 
