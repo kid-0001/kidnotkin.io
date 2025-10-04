@@ -1,67 +1,178 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function MatrixLiveChat() {
-    const [showIframe, setShowIframe] = useState(false);
-    const [iframeLoaded, setIframeLoaded] = useState(false);
+    const [messages, setMessages] = useState([]);
+    const [status, setStatus] = useState('connecting');
+    const [error, setError] = useState(null);
+    const [client, setClient] = useState(null);
+    
+    const messagesEndRef = useRef(null);
+    const intervalRef = useRef(null);
+
+    const MATRIX_BASE_URL = 'https://matrix.kidnotkin.io';
+    const ROOM_ID = '!Hbp8rkibQKPAM_zITbO2NFXtuTelQllH2eBFA2vrdRk:kidnotkin.io';
 
     useEffect(() => {
-        // Since API access is blocked by room permissions, go straight to iframe
-        setShowIframe(true);
+        initializeMatrix();
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
     }, []);
 
-    const openElementRoom = () => {
-        const url = 'https://app.element.io/#/room/#live-chat:kidnotkin.io';
-        window.open(url, '_blank');
+    const initializeMatrix = async () => {
+        try {
+            setStatus('connecting');
+            setError(null);
+
+            // Register guest user
+            const response = await fetch(`${MATRIX_BASE_URL}/_matrix/client/v3/register?kind=guest`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}'
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Guest registration failed: ${errorData.error || response.status}`);
+            }
+
+            const guestData = await response.json();
+            const newClient = {
+                accessToken: guestData.access_token,
+                userId: guestData.user_id
+            };
+
+            setClient(newClient);
+            setStatus('connected');
+            
+            // Fetch messages immediately
+            await fetchMessages(newClient);
+            
+            // Start polling for updates
+            startPolling(newClient);
+
+        } catch (err) {
+            setError(err.message);
+            setStatus('error');
+        }
     };
 
-    if (!showIframe) {
+    const fetchMessages = async (clientData) => {
+        if (!clientData) return;
+
+        try {
+            const response = await fetch(
+                `${MATRIX_BASE_URL}/_matrix/client/v3/rooms/${encodeURIComponent(ROOM_ID)}/messages?dir=b&limit=20`,
+                {
+                    headers: { 'Authorization': `Bearer ${clientData.accessToken}` }
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                const newMessages = data.chunk
+                    ?.filter(event => event.type === 'm.room.message' && event.content?.body)
+                    ?.map(event => ({
+                        id: event.event_id,
+                        sender: event.sender.split(':')[0].substring(1),
+                        body: event.content.body,
+                        timestamp: event.origin_server_ts
+                    }))
+                    ?.reverse() || [];
+
+                setMessages(newMessages);
+            } else if (response.status === 403) {
+                // Room permissions issue - show helpful message
+                setError('Room access restricted. Working on fixing permissions...');
+            }
+        } catch (err) {
+            // Silent fail for polling errors
+        }
+    };
+
+    const startPolling = (clientData) => {
+        intervalRef.current = setInterval(() => {
+            fetchMessages(clientData);
+        }, 8000);
+    };
+
+    const openElementRoom = () => {
+        window.open('https://app.element.io/#/room/#live-chat:kidnotkin.io', '_blank');
+    };
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    if (status === 'connecting') {
         return (
             <div className="flex items-center justify-center h-full bg-[#0e0e10] text-white p-4">
                 <div className="text-center">
                     <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-                    <div className="text-sm text-gray-400">Loading chat...</div>
+                    <div className="text-sm text-gray-400">Connecting to chat...</div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-full bg-[#0e0e10]">
+        <div className="flex flex-col h-full bg-[#0e0e10] text-white">
             {/* Header */}
-            <div className="p-2 bg-[#18181b] border-b border-gray-700 flex justify-between items-center flex-shrink-0">
-                <span className="text-sm font-semibold text-white">LIVE CHAT</span>
-                <button 
-                    onClick={openElementRoom}
-                    className="text-xs bg-[#9147ff] hover:bg-purple-600 px-2 py-1 rounded transition-colors text-white"
-                >
-                    Pop Out
-                </button>
-            </div>
-
-            {/* Element Iframe */}
-            <div className="flex-1 relative">
-                {!iframeLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-[#0e0e10] text-white">
-                        <div className="text-center">
-                            <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-                            <div className="text-sm text-gray-400">Loading Element...</div>
-                        </div>
+            <div className="p-3 bg-[#18181b] border-b border-gray-700 flex-shrink-0">
+                <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold">LIVE CHAT</h3>
+                    <span className="text-xs text-gray-400">{messages.length}</span>
+                </div>
+                {client && (
+                    <div className="text-xs text-blue-400 mt-1">
+                        {client.userId.split(':')[0].substring(1)}
                     </div>
                 )}
-                
-                <iframe
-                    src="https://app.element.io/#/room/#live-chat:kidnotkin.io"
-                    className="w-full h-full border-0"
-                    onLoad={() => setIframeLoaded(true)}
-                    onError={() => {
-                        console.error('Element iframe failed to load');
-                        setIframeLoaded(true); // Remove loading spinner even on error
-                    }}
-                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox"
-                    referrerPolicy="no-referrer"
-                />
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {status === 'error' ? (
+                    <div className="text-center text-red-400 text-sm p-4">
+                        <div className="mb-2">Connection Error</div>
+                        <div className="text-xs text-gray-400 mb-3">{error}</div>
+                        <button 
+                            onClick={initializeMatrix}
+                            className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                ) : messages.length === 0 ? (
+                    <div className="text-center text-gray-400 text-sm py-8">
+                        <div className="mb-2">💬</div>
+                        <div>No recent messages</div>
+                        <div className="text-xs mt-2">Be the first to chat!</div>
+                    </div>
+                ) : (
+                    messages.map((msg) => (
+                        <div key={msg.id} className="text-sm">
+                            <span className="font-bold text-[#9147ff]">{msg.sender}</span>
+                            <span className="text-gray-300">: </span>
+                            <span className="text-white">{msg.body}</span>
+                        </div>
+                    ))
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Join Button */}
+            <div className="p-3 border-t border-gray-700 bg-[#18181b] flex-shrink-0">
+                <button 
+                    onClick={openElementRoom}
+                    className="w-full bg-[#9147ff] hover:bg-purple-600 px-4 py-2 rounded text-sm font-medium transition-colors"
+                >
+                    Join Chat
+                </button>
             </div>
         </div>
     );
