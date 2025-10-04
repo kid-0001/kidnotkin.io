@@ -5,7 +5,7 @@ import StreamingMatrixChat from '../components/StreamingMatrixChat.jsx';
 
 export default function StreamingPage() {
     const [chatVisible, setChatVisible] = useState(true);
-    const [chatWidth, setChatWidth] = useState(320); // Default chat width
+    const [chatWidth, setChatWidth] = useState(320);
     const [isLandscape, setIsLandscape] = useState(false);
     const [isResizing, setIsResizing] = useState(false);
 
@@ -24,14 +24,14 @@ export default function StreamingPage() {
         };
     }, []);
 
-    const handleMouseDown = (e) => {
+    const handleMouseDown = (e: React.MouseEvent) => {  // Fix: Add proper typing
         setIsResizing(true);
         const startX = e.clientX;
         const startWidth = chatWidth;
 
-        const handleMouseMove = (e) => {
+        const handleMouseMove = (e: MouseEvent) => {  // Fix: Add proper typing
             const deltaX = startX - e.clientX;
-            const newWidth = Math.min(Math.max(280, startWidth + deltaX), 600); // Min 280px, max 600px
+            const newWidth = Math.min(Math.max(280, startWidth + deltaX), 600);
             setChatWidth(newWidth);
         };
 
@@ -64,22 +64,24 @@ export default function StreamingPage() {
                 <div 
                     className="flex-1 p-4"
                     style={{ 
-                        width: chatVisible && window.innerWidth >= 1024 ? `calc(100% - ${chatWidth}px)` : '100%',
+                        width: chatVisible && typeof window !== 'undefined' && window.innerWidth >= 1024 ? `calc(100% - ${chatWidth}px)` : '100%',
                         transition: isResizing ? 'none' : 'width 0.2s ease'
                     }}
                 >
-                    {/* Responsive Video Container */}
-                    <div className="relative w-full bg-black rounded overflow-hidden" 
-                         style={{ 
-                             aspectRatio: '16 / 9',  // Modern CSS aspect ratio
-                             minHeight: isLandscape ? '50vh' : '300px'
-                         }}>
+                    {/* Responsive Video Container - NO BLACK BARS */}
+                    <div 
+                        className="relative w-full bg-black rounded overflow-hidden"
+                        style={{ 
+                            aspectRatio: '16 / 9',  // Perfect 16:9 ratio
+                            maxHeight: isLandscape ? '50vh' : '70vh'
+                        }}
+                    >
                         <iframe
                             src="https://stream.place/embed/kidnotkin.bsky.social"
                             className="absolute inset-0 w-full h-full"
                             style={{ 
-                                objectFit: 'cover',  // Eliminates black bars
-                                border: 'none'
+                                border: 'none',
+                                objectFit: 'fill'  // Fill container completely
                             }}
                             allowFullScreen
                             allow="autoplay; fullscreen; picture-in-picture; web-share"
@@ -92,19 +94,20 @@ export default function StreamingPage() {
                 {chatVisible && (
                     <div 
                         className={`
-                            ${isLandscape ? 'absolute right-0 top-16 bottom-0 bg-gray-900/95 backdrop-blur' : 'lg:flex-shrink-0'}
+                            ${isLandscape ? 'absolute right-0 top-16 bottom-0 bg-gray-900/95 backdrop-blur z-10' : 'lg:flex-shrink-0'}
                             flex flex-col border-l border-gray-700 relative
                         `}
                         style={{ 
-                            width: window.innerWidth >= 1024 ? `${chatWidth}px` : 'auto',
+                            width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${chatWidth}px` : 'auto',
                             transition: isResizing ? 'none' : 'width 0.2s ease'
                         }}
                     >
-                        {/* Resize Handle */}
+                        {/* Resize Handle - Desktop Only */}
                         <div 
-                            className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize bg-transparent hover:bg-blue-500 transition-colors hidden lg:block"
+                            className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize bg-transparent hover:bg-blue-500 transition-colors hidden lg:block z-10"
                             onMouseDown={handleMouseDown}
                             style={{ marginLeft: '-2px' }}
+                            title="Drag to resize chat"
                         />
                         
                         <StreamingMatrixChat />
@@ -120,28 +123,6 @@ export default function StreamingPage() {
                     </button>
                 )}
             </div>
-
-            {/* Fallback CSS for older browsers */}
-            <style jsx>{`
-                @supports not (aspect-ratio: 16 / 9) {
-                    .video-container-fallback {
-                        padding-bottom: 56.25%; /* 16:9 aspect ratio */
-                        height: 0;
-                        position: relative;
-                    }
-                    .video-container-fallback iframe {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                    }
-                }
-                
-                .user-select-none {
-                    user-select: none;
-                }
-            `}</style>
         </div>
     );
 }
